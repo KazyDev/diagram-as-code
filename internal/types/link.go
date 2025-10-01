@@ -106,6 +106,21 @@ func (l *Link) drawNeighborsDot(img *image.RGBA, x, y float64) {
 	}
 }
 
+func (l *Link) drawLineWithOffset(img *image.RGBA, sourcePt image.Point, targetPt image.Point, lineStartOffset float64, lineEndOffset float64) {
+	sourceVec := vector.New(float64(sourcePt.X), float64(sourcePt.Y))
+	targetVec := vector.New(float64(targetPt.X), float64(targetPt.Y))
+	direction := targetVec.Sub(sourceVec)
+
+	// Offsets for line ends
+	// These offsets are used to connect orthogonal lines smoothly for example
+	sourceVec = sourceVec.Add(direction.Normalize().Scale(lineStartOffset))
+	targetVec = targetVec.Sub(direction.Normalize().Scale(lineEndOffset))
+
+	l.drawLine(img,
+		image.Point{int(sourceVec.X), int(sourceVec.Y)},
+		image.Point{int(targetVec.X), int(targetVec.Y)})
+}
+
 func (l *Link) drawLine(img *image.RGBA, sourcePt image.Point, targetPt image.Point) {
 	sourceVec := vector.New(float64(sourcePt.X), float64(sourcePt.Y))
 	targetVec := vector.New(float64(targetPt.X), float64(targetPt.Y))
@@ -307,7 +322,7 @@ func (l *Link) drawArrowHead(img *image.RGBA, arrowPt image.Point, originPt imag
 	length := direction.Length()
 
 	if arrowHead.Length == 0 {
-		arrowHead.Length = 10
+		arrowHead.Length = math.Max(10, 3.0*float64(l.LineWidth))
 	}
 	log.Infof("arrowHead.Length:\"%v\", arrowHead.Width:\"%v\"", arrowHead.Length, arrowHead.Width)
 	_a, _b, _c := l.getThreeSide(arrowHead.Width)
@@ -379,7 +394,10 @@ func (l *Link) Draw(img *image.RGBA) error {
 
 		// Draw the path
 		if len(controlPts) >= 1 {
-			l.drawLine(img, sourcePt, controlPts[0])
+			// Offsets for making orthogonal corners smooth
+			lineStartOffset := 0.0
+			lineEndOffset := 0.5 * float64(l.LineWidth)
+			l.drawLineWithOffset(img, sourcePt, controlPts[0], lineStartOffset, lineEndOffset)
 			l.drawArrowHead(img, sourcePt, controlPts[0], l.SourceArrowHead)
 			if err := l.drawLabel(img, l.SourcePosition, l.Source, l.Target, sourcePt, controlPts[0], "Right", l.Labels.SourceRight); err != nil {
 				return fmt.Errorf("failed to draw source right label: %w", err)
@@ -388,9 +406,13 @@ func (l *Link) Draw(img *image.RGBA) error {
 				return fmt.Errorf("failed to draw source left label: %w", err)
 			}
 			for i := 0; i < len(controlPts)-1; i++ {
-				l.drawLine(img, controlPts[i], controlPts[i+1])
+				lineStartOffset = -0.5 * float64(l.LineWidth)
+				lineEndOffset = 0.5 * float64(l.LineWidth)
+				l.drawLineWithOffset(img, controlPts[i], controlPts[i+1], lineStartOffset, lineEndOffset)
 			}
-			l.drawLine(img, controlPts[len(controlPts)-1], targetPt)
+			lineStartOffset = -0.5 * float64(l.LineWidth)
+			lineEndOffset = 0.0
+			l.drawLineWithOffset(img, controlPts[len(controlPts)-1], targetPt, lineStartOffset, lineEndOffset)
 			l.drawArrowHead(img, targetPt, controlPts[len(controlPts)-1], l.TargetArrowHead)
 			if err := l.drawLabel(img, l.TargetPosition, l.Target, l.Source, targetPt, controlPts[len(controlPts)-1], "Left", l.Labels.TargetRight); err != nil {
 				return fmt.Errorf("failed to draw target right label: %w", err)
